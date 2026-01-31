@@ -8,7 +8,6 @@ import {
   DollarSign, 
   LogOut,
   Menu,
-  X,
   Bell
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,6 +15,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useRealtimeOrders } from '@/hooks/useRealtimeOrders';
 import type { User } from '@supabase/supabase-js';
 
 const navItems = [
@@ -32,6 +32,9 @@ export default function AdminLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Enable real-time order updates
+  useRealtimeOrders();
 
   useEffect(() => {
     // Check auth status

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Search, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Product, Category } from '@/types/database';
+import { ImageUploader } from '@/components/admin/ImageUploader';
+import type { Product, Category, ProductImage } from '@/types/database';
 import { toast } from 'sonner';
 
 export default function AdminProducts() {
@@ -30,6 +31,7 @@ export default function AdminProducts() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showImageManager, setShowImageManager] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -51,7 +53,7 @@ export default function AdminProducts() {
     queryFn: async () => {
       let query = supabase
         .from('products')
-        .select(`*, category:categories(*)`)
+        .select(`*, category:categories(*), images:product_images(*)`)
         .order('created_at', { ascending: false });
 
       if (search) {
@@ -60,7 +62,7 @@ export default function AdminProducts() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as Product[];
+      return data as (Product & { images: ProductImage[] })[];
     },
   });
 
@@ -385,9 +387,17 @@ export default function AdminProducts() {
                   <tr key={product.id} className="hover:bg-secondary/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0">
-                          <Package className="w-5 h-5 text-muted-foreground" />
-                        </div>
+                        {product.images?.find(img => img.is_main)?.image_url ? (
+                          <img 
+                            src={product.images.find(img => img.is_main)?.image_url} 
+                            alt={product.name}
+                            className="w-10 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0">
+                            <Package className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                        )}
                         <div>
                           <div className="font-medium">{product.name}</div>
                           {product.sku && (
@@ -411,6 +421,14 @@ export default function AdminProducts() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowImageManager(product.id)}
+                        title="Rasmlar"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -438,6 +456,22 @@ export default function AdminProducts() {
           </table>
         </div>
       </div>
+
+      {/* Image Manager Dialog */}
+      <Dialog open={!!showImageManager} onOpenChange={() => setShowImageManager(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Mahsulot rasmlari</DialogTitle>
+          </DialogHeader>
+          {showImageManager && (
+            <ImageUploader
+              productId={showImageManager}
+              images={products?.find(p => p.id === showImageManager)?.images || []}
+              onImagesChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
