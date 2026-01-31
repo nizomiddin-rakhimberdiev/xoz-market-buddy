@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { MapPin, Crosshair, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,32 +22,33 @@ interface LocationPickerProps {
   onLocationChange: (lat: number, lng: number, address: string) => void;
 }
 
-function LocationMarker({ 
+// Component to handle map click events and marker
+function MapEvents({ 
   position, 
-  onPositionChange 
+  onPositionChange,
+  setMapInstance
 }: { 
   position: [number, number]; 
   onPositionChange: (lat: number, lng: number) => void;
+  setMapInstance: (map: L.Map) => void;
 }) {
   const map = useMap();
   
+  useEffect(() => {
+    setMapInstance(map);
+  }, [map, setMapInstance]);
+
   useMapEvents({
     click(e) {
       onPositionChange(e.latlng.lat, e.latlng.lng);
     },
   });
 
-  // Update marker when position changes
-  useEffect(() => {
-    if (position) {
-      map.flyTo(position, map.getZoom(), { animate: true, duration: 0.5 });
-    }
-  }, [position, map]);
-
   return <Marker position={position} icon={customIcon} />;
 }
 
-function MapController({ 
+// Geolocation button component
+function GeolocationButton({ 
   onLocate, 
   isLocating 
 }: { 
@@ -77,7 +78,7 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [address, setAddress] = useState('');
-  const mapRef = useRef<L.Map | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
   const addressFetchedRef = useRef(false);
 
   // Reverse geocode to get address from coordinates
@@ -129,6 +130,10 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
     getAddressFromCoords(newLat, newLng);
   }, [getAddressFromCoords]);
 
+  const handleSetMapInstance = useCallback((map: L.Map) => {
+    mapInstanceRef.current = map;
+  }, []);
+
   const handleGetCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       return;
@@ -140,8 +145,8 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
         const newLat = pos.coords.latitude;
         const newLng = pos.coords.longitude;
         setPosition([newLat, newLng]);
-        if (mapRef.current) {
-          mapRef.current.flyTo([newLat, newLng], 16);
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.flyTo([newLat, newLng], 16);
         }
         getAddressFromCoords(newLat, newLng);
         setIsLocating(false);
@@ -169,7 +174,6 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
           center={position}
           zoom={14}
           style={{ height: '100%', width: '100%' }}
-          ref={mapRef}
           scrollWheelZoom={true}
           doubleClickZoom={true}
           touchZoom={true}
@@ -179,9 +183,13 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <LocationMarker position={position} onPositionChange={handlePositionChange} />
+          <MapEvents 
+            position={position} 
+            onPositionChange={handlePositionChange}
+            setMapInstance={handleSetMapInstance}
+          />
         </MapContainer>
-        <MapController onLocate={handleGetCurrentLocation} isLocating={isLocating} />
+        <GeolocationButton onLocate={handleGetCurrentLocation} isLocating={isLocating} />
       </div>
 
       {/* Address display */}
@@ -201,7 +209,7 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        📍 Xaritadagi istalgan joyni bosing yoki <span className="font-medium">⊕</span> tugmasini bosib joriy joylashuvingizni aniqlang
+        📍 Xaritadagi istalgan joyni bosing yoki ⊕ tugmasini bosib joriy joylashuvingizni aniqlang
       </p>
     </div>
   );
