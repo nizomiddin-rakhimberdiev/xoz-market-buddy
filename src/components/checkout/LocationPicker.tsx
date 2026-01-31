@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { MapPin, Crosshair, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Custom marker icon
-const customIcon = new L.Icon({
+// Fix for default marker icon
+const defaultIcon = L.icon({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
@@ -22,63 +21,14 @@ interface LocationPickerProps {
   onLocationChange: (lat: number, lng: number, address: string) => void;
 }
 
-// Component to handle map click events and marker
-function MapEvents({ 
-  position, 
-  onPositionChange,
-  setMapInstance
-}: { 
-  position: [number, number]; 
-  onPositionChange: (lat: number, lng: number) => void;
-  setMapInstance: (map: L.Map) => void;
-}) {
-  const map = useMap();
-  
-  useEffect(() => {
-    setMapInstance(map);
-  }, [map, setMapInstance]);
-
-  useMapEvents({
-    click(e) {
-      onPositionChange(e.latlng.lat, e.latlng.lng);
-    },
-  });
-
-  return <Marker position={position} icon={customIcon} />;
-}
-
-// Geolocation button component
-function GeolocationButton({ 
-  onLocate, 
-  isLocating 
-}: { 
-  onLocate: () => void;
-  isLocating: boolean;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="icon"
-      className="absolute bottom-4 right-4 z-[1000] shadow-lg bg-background hover:bg-secondary"
-      onClick={onLocate}
-      disabled={isLocating}
-    >
-      {isLocating ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      ) : (
-        <Crosshair className="w-4 h-4" />
-      )}
-    </Button>
-  );
-}
-
 export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerProps) {
-  const [position, setPosition] = useState<[number, number]>([lat, lng]);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [address, setAddress] = useState('');
-  const mapInstanceRef = useRef<L.Map | null>(null);
   const addressFetchedRef = useRef(false);
 
   // Reverse geocode to get address from coordinates
@@ -90,7 +40,6 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
         {
           headers: {
             'Accept-Language': 'uz,ru,en',
-            'User-Agent': 'XozMarket/1.0',
           },
         }
       );
@@ -125,14 +74,49 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
     }
   }, [onLocationChange]);
 
-  const handlePositionChange = useCallback((newLat: number, newLng: number) => {
-    setPosition([newLat, newLng]);
-    getAddressFromCoords(newLat, newLng);
-  }, [getAddressFromCoords]);
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
 
-  const handleSetMapInstance = useCallback((map: L.Map) => {
-    mapInstanceRef.current = map;
-  }, []);
+    // Create map
+    const map = L.map(mapContainerRef.current, {
+      center: [lat, lng],
+      zoom: 14,
+      scrollWheelZoom: true,
+      doubleClickZoom: false, // Disable to allow click for marker
+    });
+
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    // Add marker
+    const marker = L.marker([lat, lng], { icon: defaultIcon }).addTo(map);
+
+    // Handle map click
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const { lat: newLat, lng: newLng } = e.latlng;
+      marker.setLatLng([newLat, newLng]);
+      getAddressFromCoords(newLat, newLng);
+    });
+
+    mapRef.current = map;
+    markerRef.current = marker;
+
+    // Get initial address
+    if (!addressFetchedRef.current) {
+      addressFetchedRef.current = true;
+      getAddressFromCoords(lat, lng);
+    }
+
+    // Cleanup
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+  }, [lat, lng, getAddressFromCoords]);
 
   const handleGetCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -144,10 +128,12 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
       (pos) => {
         const newLat = pos.coords.latitude;
         const newLng = pos.coords.longitude;
-        setPosition([newLat, newLng]);
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.flyTo([newLat, newLng], 16);
+        
+        if (mapRef.current && markerRef.current) {
+          mapRef.current.flyTo([newLat, newLng], 16);
+          markerRef.current.setLatLng([newLat, newLng]);
         }
+        
         getAddressFromCoords(newLat, newLng);
         setIsLocating(false);
       },
@@ -159,37 +145,27 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
     );
   }, [getAddressFromCoords]);
 
-  // Get initial address only once
-  useEffect(() => {
-    if (!addressFetchedRef.current) {
-      addressFetchedRef.current = true;
-      getAddressFromCoords(lat, lng);
-    }
-  }, [lat, lng, getAddressFromCoords]);
-
   return (
     <div className="space-y-3">
       <div className="relative rounded-xl overflow-hidden border border-border" style={{ height: '280px' }}>
-        <MapContainer
-          center={position}
-          zoom={14}
+        <div 
+          ref={mapContainerRef} 
           style={{ height: '100%', width: '100%' }}
-          scrollWheelZoom={true}
-          doubleClickZoom={true}
-          touchZoom={true}
-          dragging={true}
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="absolute bottom-4 right-4 z-[1000] shadow-lg bg-background hover:bg-secondary"
+          onClick={handleGetCurrentLocation}
+          disabled={isLocating}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <MapEvents 
-            position={position} 
-            onPositionChange={handlePositionChange}
-            setMapInstance={handleSetMapInstance}
-          />
-        </MapContainer>
-        <GeolocationButton onLocate={handleGetCurrentLocation} isLocating={isLocating} />
+          {isLocating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Crosshair className="w-4 h-4" />
+          )}
+        </Button>
       </div>
 
       {/* Address display */}
