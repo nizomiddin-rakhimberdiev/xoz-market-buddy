@@ -40,12 +40,12 @@ export default function AdminProducts() {
     sku: '',
     category_id: '',
     unit: 'dona' as 'dona' | 'kg' | 'quti' | 'paket',
-    cost_price: 0,
-    price: 0,
-    old_price: 0,
-    stock_qty: 0,
-    min_order_qty: 1,
-    step_qty: 1,
+    cost_price: '',
+    price: '',
+    old_price: '',
+    stock_qty: '',
+    min_order_qty: '1',
+    step_qty: '1',
   });
 
   const { data: products, isLoading } = useQuery({
@@ -83,10 +83,18 @@ export default function AdminProducts() {
     mutationFn: async (data: typeof formData) => {
       const slug = data.slug || data.name.toLowerCase().replace(/\s+/g, '-');
       const { error } = await supabase.from('products').insert({
-        ...data,
+        name: data.name,
         slug,
+        description: data.description || null,
+        sku: data.sku || null,
         category_id: data.category_id || null,
-        old_price: data.old_price || null,
+        unit: data.unit,
+        cost_price: Number(data.cost_price) || 0,
+        price: Number(data.price) || 0,
+        old_price: data.old_price ? Number(data.old_price) : null,
+        stock_qty: Number(data.stock_qty) || 0,
+        min_order_qty: Number(data.min_order_qty) || 1,
+        step_qty: Number(data.step_qty) || 1,
       });
       if (error) throw error;
     },
@@ -107,9 +115,18 @@ export default function AdminProducts() {
       const { error } = await supabase
         .from('products')
         .update({
-          ...updateData,
+          name: updateData.name,
+          slug: updateData.slug,
+          description: updateData.description || null,
+          sku: updateData.sku || null,
           category_id: updateData.category_id || null,
-          old_price: updateData.old_price || null,
+          unit: updateData.unit,
+          cost_price: Number(updateData.cost_price) || 0,
+          price: Number(updateData.price) || 0,
+          old_price: updateData.old_price ? Number(updateData.old_price) : null,
+          stock_qty: Number(updateData.stock_qty) || 0,
+          min_order_qty: Number(updateData.min_order_qty) || 1,
+          step_qty: Number(updateData.step_qty) || 1,
         })
         .eq('id', id);
       if (error) throw error;
@@ -147,12 +164,12 @@ export default function AdminProducts() {
       sku: '',
       category_id: '',
       unit: 'dona',
-      cost_price: 0,
-      price: 0,
-      old_price: 0,
-      stock_qty: 0,
-      min_order_qty: 1,
-      step_qty: 1,
+      cost_price: '',
+      price: '',
+      old_price: '',
+      stock_qty: '',
+      min_order_qty: '1',
+      step_qty: '1',
     });
     setEditingProduct(null);
   };
@@ -166,12 +183,12 @@ export default function AdminProducts() {
       sku: product.sku || '',
       category_id: product.category_id || '',
       unit: product.unit,
-      cost_price: product.cost_price,
-      price: product.price,
-      old_price: product.old_price || 0,
-      stock_qty: product.stock_qty,
-      min_order_qty: product.min_order_qty,
-      step_qty: product.step_qty,
+      cost_price: String(product.cost_price),
+      price: String(product.price),
+      old_price: product.old_price ? String(product.old_price) : '',
+      stock_qty: String(product.stock_qty),
+      min_order_qty: String(product.min_order_qty),
+      step_qty: String(product.step_qty),
     });
     setIsDialogOpen(true);
   };
@@ -263,7 +280,8 @@ export default function AdminProducts() {
                   <Input
                     type="number"
                     value={formData.cost_price}
-                    onChange={(e) => setFormData({ ...formData, cost_price: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                    placeholder="0"
                     required
                   />
                 </div>
@@ -272,7 +290,8 @@ export default function AdminProducts() {
                   <Input
                     type="number"
                     value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    placeholder="0"
                     required
                   />
                 </div>
@@ -281,7 +300,8 @@ export default function AdminProducts() {
                   <Input
                     type="number"
                     value={formData.old_price}
-                    onChange={(e) => setFormData({ ...formData, old_price: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, old_price: e.target.value })}
+                    placeholder="0"
                   />
                 </div>
               </div>
@@ -292,7 +312,8 @@ export default function AdminProducts() {
                   <Input
                     type="number"
                     value={formData.stock_qty}
-                    onChange={(e) => setFormData({ ...formData, stock_qty: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, stock_qty: e.target.value })}
+                    placeholder="0"
                   />
                 </div>
                 <div className="space-y-2">
@@ -300,7 +321,8 @@ export default function AdminProducts() {
                   <Input
                     type="number"
                     value={formData.min_order_qty}
-                    onChange={(e) => setFormData({ ...formData, min_order_qty: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, min_order_qty: e.target.value })}
+                    placeholder="1"
                   />
                 </div>
                 <div className="space-y-2">
@@ -308,7 +330,8 @@ export default function AdminProducts() {
                   <Input
                     type="number"
                     value={formData.step_qty}
-                    onChange={(e) => setFormData({ ...formData, step_qty: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, step_qty: e.target.value })}
+                    placeholder="1"
                   />
                 </div>
                 <div className="space-y-2">
