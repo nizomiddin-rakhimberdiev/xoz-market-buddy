@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { ImageUploader } from '@/components/admin/ImageUploader';
 import { VariantManager } from '@/components/admin/VariantManager';
+import { InlineVariantEditor, type VariantFormItem } from '@/components/admin/InlineVariantEditor';
 import type { Product, Category, ProductImage, ProductVariant } from '@/types/database';
 import { toast } from 'sonner';
 
@@ -49,6 +50,8 @@ export default function AdminProducts() {
     min_order_qty: '1',
     step_qty: '1',
   });
+
+  const [formVariants, setFormVariants] = useState<VariantFormItem[]>([]);
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products', search],
@@ -82,23 +85,49 @@ export default function AdminProducts() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
+    mutationFn: async ({ data, variants }: { data: typeof formData; variants: VariantFormItem[] }) => {
       const slug = data.slug || data.name.toLowerCase().replace(/\s+/g, '-');
-      const { error } = await supabase.from('products').insert({
-        name: data.name,
-        slug,
-        description: data.description || null,
-        sku: data.sku || null,
-        category_id: data.category_id || null,
-        unit: data.unit,
-        cost_price: Number(data.cost_price) || 0,
-        price: Number(data.price) || 0,
-        old_price: data.old_price ? Number(data.old_price) : null,
-        stock_qty: Number(data.stock_qty) || 0,
-        min_order_qty: Number(data.min_order_qty) || 1,
-        step_qty: Number(data.step_qty) || 1,
-      });
-      if (error) throw error;
+      
+      // Create product first
+      const { data: newProduct, error: productError } = await supabase
+        .from('products')
+        .insert({
+          name: data.name,
+          slug,
+          description: data.description || null,
+          sku: data.sku || null,
+          category_id: data.category_id || null,
+          unit: data.unit,
+          cost_price: Number(data.cost_price) || 0,
+          price: Number(data.price) || 0,
+          old_price: data.old_price ? Number(data.old_price) : null,
+          stock_qty: Number(data.stock_qty) || 0,
+          min_order_qty: Number(data.min_order_qty) || 1,
+          step_qty: Number(data.step_qty) || 1,
+        })
+        .select('id')
+        .single();
+      
+      if (productError) throw productError;
+
+      // Create variants if any
+      if (variants.length > 0 && newProduct) {
+        const variantsToInsert = variants.map(v => ({
+          product_id: newProduct.id,
+          name: v.name,
+          price_override: v.price_override ? Number(v.price_override) : null,
+          cost_price_override: v.cost_price_override ? Number(v.cost_price_override) : null,
+          stock_qty: v.stock_qty ? Number(v.stock_qty) : 0,
+          sku: v.sku || null,
+          is_active: true,
+        }));
+
+        const { error: variantsError } = await supabase
+          .from('product_variants')
+          .insert(variantsToInsert);
+        
+        if (variantsError) throw variantsError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
@@ -173,10 +202,11 @@ export default function AdminProducts() {
       min_order_qty: '1',
       step_qty: '1',
     });
+    setFormVariants([]);
     setEditingProduct(null);
   };
 
-  const openEditDialog = (product: Product) => {
+  const openEditDialog = (product: Product & { variants?: ProductVariant[] }) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -192,6 +222,17 @@ export default function AdminProducts() {
       min_order_qty: String(product.min_order_qty),
       step_qty: String(product.step_qty),
     });
+    // Load existing variants into form
+    const existingVariants: VariantFormItem[] = (product.variants || []).map(v => ({
+      id: v.id,
+      name: v.name,
+      price_override: v.price_override?.toString() || '',
+      cost_price_override: v.cost_price_override?.toString() || '',
+      stock_qty: v.stock_qty?.toString() || '',
+      sku: v.sku || '',
+      is_new: false,
+    }));
+    setFormVariants(existingVariants);
     setIsDialogOpen(true);
   };
 
@@ -200,7 +241,7 @@ export default function AdminProducts() {
     if (editingProduct) {
       updateMutation.mutate({ ...formData, id: editingProduct.id });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate({ data: formData, variants: formVariants });
     }
   };
 
@@ -354,6 +395,18 @@ export default function AdminProducts() {
                   </Select>
                 </div>
               </div>
+
+              {/* Inline Variant Editor - only show for new products */}
+              {!editingProduct && (
+                <div className="border-t pt-4">
+                  <InlineVariantEditor
+                    variants={formVariants}
+                    onChange={setFormVariants}
+                    basePrice={formData.price}
+                    baseCostPrice={formData.cost_price}
+                  />
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
