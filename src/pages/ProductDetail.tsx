@@ -44,6 +44,13 @@ export default function ProductDetail() {
   const handleAddToCart = () => {
     if (!product) return;
 
+    // If product has variants, user must select one
+    const hasVariants = product.variants && product.variants.filter(v => v.is_active && v.stock_qty > 0).length > 0;
+    if (hasVariants && !selectedVariant) {
+      toast.error('Iltimos, variant tanlang');
+      return;
+    }
+
     addItem({
       productId: product.id,
       variantId: selectedVariant?.id,

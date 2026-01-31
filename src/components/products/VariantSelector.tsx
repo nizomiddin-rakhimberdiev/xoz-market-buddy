@@ -5,7 +5,7 @@ import { formatPrice } from '@/lib/api';
 interface VariantSelectorProps {
   variants: ProductVariant[];
   selectedVariant: ProductVariant | null;
-  onSelectVariant: (variant: ProductVariant | null) => void;
+  onSelectVariant: (variant: ProductVariant) => void;
   basePrice: number;
 }
 
@@ -30,7 +30,7 @@ export function VariantSelector({
           return (
             <button
               key={variant.id}
-              onClick={() => onSelectVariant(isSelected ? null : variant)}
+              onClick={() => onSelectVariant(variant)}
               className={cn(
                 'px-4 py-2 rounded-xl border-2 transition-all text-sm font-medium',
                 isSelected
@@ -39,15 +39,16 @@ export function VariantSelector({
               )}
             >
               <span>{variant.name}</span>
-              {variant.price_override && variant.price_override !== basePrice && (
-                <span className="ml-2 text-xs opacity-75">
-                  {formatPrice(price)}
-                </span>
-              )}
+              <span className="ml-2 text-xs opacity-75">
+                {formatPrice(price)}
+              </span>
             </button>
           );
         })}
       </div>
+      {!selectedVariant && activeVariants.length > 0 && (
+        <p className="text-xs text-amber-600">Iltimos, variant tanlang</p>
+      )}
     </div>
   );
 }

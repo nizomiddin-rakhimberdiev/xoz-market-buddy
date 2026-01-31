@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, CreditCard, Banknote, Building2, Truck, Store, Check } from 'lucide-react';
+import { ArrowLeft, CreditCard, Banknote, Building2, Truck, Store, Check } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { LocationPicker } from '@/components/checkout/LocationPicker';
 import { useCartStore } from '@/stores/cartStore';
 import { createOrder, formatPrice } from '@/lib/api';
 import type { DeliveryType, PaymentType } from '@/types/database';
@@ -217,36 +218,26 @@ export default function Checkout() {
                 </div>
 
                 {formData.deliveryType === 'delivery' && (
-                  <div className="space-y-4 pt-4 border-t border-border">
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Manzil *</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
-                        <Textarea
-                          id="address"
-                          value={formData.deliveryAddress}
-                          onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
-                          placeholder="To'liq manzilni kiriting..."
-                          className={cn('pl-10 min-h-[80px]', errors.deliveryAddress ? 'border-destructive' : '')}
-                        />
-                      </div>
-                      {errors.deliveryAddress && (
-                        <p className="text-sm text-destructive">{errors.deliveryAddress}</p>
-                      )}
-                    </div>
-                    
-                    {/* Map placeholder */}
-                    <div className="rounded-xl overflow-hidden border border-border">
-                      <iframe
-                        src={`https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d191885.25349753856!2d69.11455563398827!3d41.28269029306466!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x38ae8b0cc379e9c3%3A0xa5a9323b4aa5cb98!2sTashkent%2C%20Uzbekistan!5e0!3m2!1sen!2s!4v1700000000000!5m2!1sen!2s`}
-                        width="100%"
-                        height="200"
-                        style={{ border: 0 }}
-                        allowFullScreen
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
-                    </div>
+                  <div className="pt-4 border-t border-border">
+                    <LocationPicker
+                      lat={formData.deliveryLat}
+                      lng={formData.deliveryLng}
+                      onLocationChange={(lat, lng, address) => {
+                        setFormData({
+                          ...formData,
+                          deliveryLat: lat,
+                          deliveryLng: lng,
+                          deliveryAddress: address,
+                        });
+                        // Clear address error when location is selected
+                        if (errors.deliveryAddress) {
+                          setErrors({ ...errors, deliveryAddress: '' });
+                        }
+                      }}
+                    />
+                    {errors.deliveryAddress && (
+                      <p className="text-sm text-destructive mt-2">{errors.deliveryAddress}</p>
+                    )}
                   </div>
                 )}
               </div>
