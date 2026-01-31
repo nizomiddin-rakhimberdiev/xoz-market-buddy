@@ -89,65 +89,28 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   return data as Product;
 }
 
-// Orders
+// Orders - Now uses server-side validated edge function
 export async function createOrder(input: CreateOrderInput): Promise<Order> {
-  // Generate order number
-  const orderNumber = `XOZ-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-  
-  const totalAmount = input.items.reduce(
-    (sum, item) => sum + item.unit_price * item.quantity,
-    0
-  );
+  const { data, error } = await supabase.functions.invoke('create-order', {
+    body: input,
+  });
 
-  // Create order
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      order_number: orderNumber,
-      customer_name: input.customer_name,
-      customer_phone: input.customer_phone,
-      delivery_type: input.delivery_type,
-      delivery_lat: input.delivery_lat,
-      delivery_lng: input.delivery_lng,
-      delivery_address_text: input.delivery_address_text,
-      payment_type: input.payment_type,
-      comment: input.comment,
-      total_amount: totalAmount,
-      status: 'new',
-    })
-    .select()
-    .single();
-
-  if (orderError) throw orderError;
-
-  // Create order items
-  const orderItems = input.items.map((item) => ({
-    order_id: order.id,
-    product_id: item.product_id,
-    variant_id: item.variant_id || null,
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    line_total: item.unit_price * item.quantity,
-    cost_price_snapshot: item.cost_price,
-    product_name_snapshot: item.product_name,
-  }));
-
-  const { error: itemsError } = await supabase
-    .from('order_items')
-    .insert(orderItems);
-
-  if (itemsError) throw itemsError;
-
-  // Trigger Telegram notification via edge function
-  try {
-    await supabase.functions.invoke('notify-telegram', {
-      body: { order: { ...order, items: orderItems } },
-    });
-  } catch (e) {
-    console.error('Failed to send Telegram notification:', e);
+  if (error) {
+    console.error('Order creation error:', error);
+    throw new Error(error.message || 'Failed to create order');
   }
 
-  return order as Order;
+  if (!data?.success) {
+    const errorMessage = data?.error || 'Failed to create order';
+    const details = data?.details;
+    if (details && Array.isArray(details)) {
+      const fieldErrors = details.map((d: { field: string; message: string }) => d.message).join(', ');
+      throw new Error(fieldErrors);
+    }
+    throw new Error(errorMessage);
+  }
+
+  return data.order as Order;
 }
 
 // Format price
