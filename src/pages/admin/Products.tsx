@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Search, Package, ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, ImageIcon, Layers } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ImageUploader } from '@/components/admin/ImageUploader';
-import type { Product, Category, ProductImage } from '@/types/database';
+import { VariantManager } from '@/components/admin/VariantManager';
+import type { Product, Category, ProductImage, ProductVariant } from '@/types/database';
 import { toast } from 'sonner';
 
 export default function AdminProducts() {
@@ -32,6 +33,7 @@ export default function AdminProducts() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showImageManager, setShowImageManager] = useState<string | null>(null);
+  const [showVariantManager, setShowVariantManager] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -53,7 +55,7 @@ export default function AdminProducts() {
     queryFn: async () => {
       let query = supabase
         .from('products')
-        .select(`*, category:categories(*), images:product_images(*)`)
+        .select(`*, category:categories(*), images:product_images(*), variants:product_variants(*)`)
         .order('created_at', { ascending: false });
 
       if (search) {
@@ -62,7 +64,7 @@ export default function AdminProducts() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as (Product & { images: ProductImage[] })[];
+      return data as (Product & { images: ProductImage[]; variants: ProductVariant[] })[];
     },
   });
 
@@ -387,6 +389,7 @@ export default function AdminProducts() {
                 <th className="text-left px-4 py-3 font-medium">Kategoriya</th>
                 <th className="text-left px-4 py-3 font-medium">Narx</th>
                 <th className="text-left px-4 py-3 font-medium">Ombor</th>
+                <th className="text-left px-4 py-3 font-medium">Variantlar</th>
                 <th className="text-right px-4 py-3 font-medium">Amallar</th>
               </tr>
             </thead>
@@ -394,14 +397,14 @@ export default function AdminProducts() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={5} className="px-4 py-3">
+                    <td colSpan={6} className="px-4 py-3">
                       <Skeleton className="h-10 w-full" />
                     </td>
                   </tr>
                 ))
               ) : products?.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     Mahsulotlar topilmadi
                   </td>
                 </tr>
@@ -414,12 +417,17 @@ export default function AdminProducts() {
                           <img 
                             src={product.images.find(img => img.is_main)?.image_url} 
                             alt={product.name}
-                            className="w-10 h-10 rounded-lg object-cover shrink-0"
+                            className="w-10 h-10 rounded-lg object-cover shrink-0 cursor-pointer hover:opacity-80"
+                            onClick={() => setShowImageManager(product.id)}
                           />
                         ) : (
-                          <div className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0">
-                            <Package className="w-5 h-5 text-muted-foreground" />
-                          </div>
+                          <button
+                            onClick={() => setShowImageManager(product.id)}
+                            className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0 hover:bg-secondary/80 transition-colors border-2 border-dashed border-border"
+                            title="Rasm qo'shish"
+                          >
+                            <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                          </button>
                         )}
                         <div>
                           <div className="font-medium">{product.name}</div>
@@ -442,6 +450,17 @@ export default function AdminProducts() {
                       <span className={product.stock_qty > 0 ? 'text-success' : 'text-destructive'}>
                         {product.stock_qty} {product.unit}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 h-8 text-xs"
+                        onClick={() => setShowVariantManager(product.id)}
+                      >
+                        <Layers className="w-3 h-3" />
+                        {product.variants?.length || 0}
+                      </Button>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button
@@ -491,6 +510,31 @@ export default function AdminProducts() {
               productId={showImageManager}
               images={products?.find(p => p.id === showImageManager)?.images || []}
               onImagesChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Variant Manager Dialog */}
+      <Dialog open={!!showVariantManager} onOpenChange={() => setShowVariantManager(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Mahsulot variantlari
+              {showVariantManager && (
+                <span className="text-muted-foreground font-normal text-sm block mt-1">
+                  {products?.find(p => p.id === showVariantManager)?.name}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {showVariantManager && (
+            <VariantManager
+              productId={showVariantManager}
+              variants={products?.find(p => p.id === showVariantManager)?.variants || []}
+              basePrice={products?.find(p => p.id === showVariantManager)?.price || 0}
+              baseCostPrice={products?.find(p => p.id === showVariantManager)?.cost_price || 0}
+              onVariantsChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
             />
           )}
         </DialogContent>

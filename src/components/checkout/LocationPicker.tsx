@@ -1,16 +1,19 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { MapPin, Crosshair, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix for default marker icon
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+// Custom marker icon
+const customIcon = new L.Icon({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
 });
 
 interface LocationPickerProps {
@@ -26,41 +29,45 @@ function LocationMarker({
   position: [number, number]; 
   onPositionChange: (lat: number, lng: number) => void;
 }) {
+  const map = useMap();
+  
   useMapEvents({
     click(e) {
       onPositionChange(e.latlng.lat, e.latlng.lng);
     },
   });
 
-  return <Marker position={position} />;
+  // Update marker when position changes
+  useEffect(() => {
+    if (position) {
+      map.flyTo(position, map.getZoom(), { animate: true, duration: 0.5 });
+    }
+  }, [position, map]);
+
+  return <Marker position={position} icon={customIcon} />;
 }
 
-function MapCenterButton({ onCenter }: { onCenter: () => void }) {
-  const map = useMap();
-  
-  const handleCenter = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          map.flyTo([pos.coords.latitude, pos.coords.longitude], 16);
-          onCenter();
-        },
-        () => {
-          // If geolocation fails, stay at current position
-        }
-      );
-    }
-  };
-
+function MapController({ 
+  onLocate, 
+  isLocating 
+}: { 
+  onLocate: () => void;
+  isLocating: boolean;
+}) {
   return (
     <Button
       type="button"
       variant="secondary"
       size="icon"
-      className="absolute bottom-4 right-4 z-[1000] shadow-lg"
-      onClick={handleCenter}
+      className="absolute bottom-4 right-4 z-[1000] shadow-lg bg-background hover:bg-secondary"
+      onClick={onLocate}
+      disabled={isLocating}
     >
-      <Crosshair className="w-4 h-4" />
+      {isLocating ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : (
+        <Crosshair className="w-4 h-4" />
+      )}
     </Button>
   );
 }
@@ -68,11 +75,13 @@ function MapCenterButton({ onCenter }: { onCenter: () => void }) {
 export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerProps) {
   const [position, setPosition] = useState<[number, number]>([lat, lng]);
   const [isLoadingAddress, setIsLoadingAddress] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [address, setAddress] = useState('');
   const mapRef = useRef<L.Map | null>(null);
+  const addressFetchedRef = useRef(false);
 
   // Reverse geocode to get address from coordinates
-  const getAddressFromCoords = async (latitude: number, longitude: number) => {
+  const getAddressFromCoords = useCallback(async (latitude: number, longitude: number) => {
     setIsLoadingAddress(true);
     try {
       const response = await fetch(
@@ -80,79 +89,99 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
         {
           headers: {
             'Accept-Language': 'uz,ru,en',
+            'User-Agent': 'XozMarket/1.0',
           },
         }
       );
       const data = await response.json();
       
       if (data && data.display_name) {
-        // Format address nicely
-        const parts = [];
+        const parts: string[] = [];
         if (data.address) {
           if (data.address.road) parts.push(data.address.road);
           if (data.address.house_number) parts.push(data.address.house_number);
           if (data.address.neighbourhood) parts.push(data.address.neighbourhood);
           if (data.address.suburb) parts.push(data.address.suburb);
-          if (data.address.city || data.address.town) parts.push(data.address.city || data.address.town);
+          if (data.address.city || data.address.town || data.address.village) {
+            parts.push(data.address.city || data.address.town || data.address.village);
+          }
         }
         const formattedAddress = parts.length > 0 ? parts.join(', ') : data.display_name;
         setAddress(formattedAddress);
         onLocationChange(latitude, longitude, formattedAddress);
+      } else {
+        const fallbackAddress = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        setAddress(fallbackAddress);
+        onLocationChange(latitude, longitude, fallbackAddress);
       }
     } catch (error) {
       console.error('Failed to get address:', error);
-      setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-      onLocationChange(latitude, longitude, `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+      const fallbackAddress = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      setAddress(fallbackAddress);
+      onLocationChange(latitude, longitude, fallbackAddress);
     } finally {
       setIsLoadingAddress(false);
     }
-  };
+  }, [onLocationChange]);
 
-  const handlePositionChange = (newLat: number, newLng: number) => {
+  const handlePositionChange = useCallback((newLat: number, newLng: number) => {
     setPosition([newLat, newLng]);
     getAddressFromCoords(newLat, newLng);
-  };
+  }, [getAddressFromCoords]);
 
-  const handleGetCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const newLat = pos.coords.latitude;
-          const newLng = pos.coords.longitude;
-          setPosition([newLat, newLng]);
-          if (mapRef.current) {
-            mapRef.current.flyTo([newLat, newLng], 16);
-          }
-          getAddressFromCoords(newLat, newLng);
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-        }
-      );
+  const handleGetCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      return;
     }
-  };
+    
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const newLat = pos.coords.latitude;
+        const newLng = pos.coords.longitude;
+        setPosition([newLat, newLng]);
+        if (mapRef.current) {
+          mapRef.current.flyTo([newLat, newLng], 16);
+        }
+        getAddressFromCoords(newLat, newLng);
+        setIsLocating(false);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [getAddressFromCoords]);
 
-  // Get initial address
+  // Get initial address only once
   useEffect(() => {
-    getAddressFromCoords(lat, lng);
-  }, []);
+    if (!addressFetchedRef.current) {
+      addressFetchedRef.current = true;
+      getAddressFromCoords(lat, lng);
+    }
+  }, [lat, lng, getAddressFromCoords]);
 
   return (
     <div className="space-y-3">
-      <div className="relative rounded-xl overflow-hidden border border-border">
+      <div className="relative rounded-xl overflow-hidden border border-border" style={{ height: '280px' }}>
         <MapContainer
           center={position}
           zoom={14}
-          style={{ height: '250px', width: '100%' }}
+          style={{ height: '100%', width: '100%' }}
           ref={mapRef}
+          scrollWheelZoom={true}
+          doubleClickZoom={true}
+          touchZoom={true}
+          dragging={true}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <LocationMarker position={position} onPositionChange={handlePositionChange} />
-          <MapCenterButton onCenter={handleGetCurrentLocation} />
         </MapContainer>
+        <MapController onLocate={handleGetCurrentLocation} isLocating={isLocating} />
       </div>
 
       {/* Address display */}
@@ -171,8 +200,8 @@ export function LocationPicker({ lat, lng, onLocationChange }: LocationPickerPro
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Xaritadagi joyni bosing yoki o'ng pastdagi tugmani bosib joriy manzilingizni aniqlang
+      <p className="text-xs text-muted-foreground text-center">
+        📍 Xaritadagi istalgan joyni bosing yoki <span className="font-medium">⊕</span> tugmasini bosib joriy joylashuvingizni aniqlang
       </p>
     </div>
   );
