@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Search, Package, ImageIcon, Layers } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, ImageIcon, Layers, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPrice } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -22,11 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ImageUploader } from '@/components/admin/ImageUploader';
+import { CreateImageUploader, type PendingImage } from '@/components/admin/CreateImageUploader';
 import { VariantManager } from '@/components/admin/VariantManager';
 import { InlineVariantEditor, type VariantFormItem } from '@/components/admin/InlineVariantEditor';
 import type { Product, Category, ProductImage, ProductVariant } from '@/types/database';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 export default function AdminProducts() {
   const queryClient = useQueryClient();
@@ -35,6 +38,7 @@ export default function AdminProducts() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showImageManager, setShowImageManager] = useState<string | null>(null);
   const [showVariantManager, setShowVariantManager] = useState<string | null>(null);
+  const [formTab, setFormTab] = useState('info');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -52,6 +56,7 @@ export default function AdminProducts() {
   });
 
   const [formVariants, setFormVariants] = useState<VariantFormItem[]>([]);
+  const [formImages, setFormImages] = useState<PendingImage[]>([]);
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products', search],
@@ -84,11 +89,36 @@ export default function AdminProducts() {
     },
   });
 
+  const uploadPendingImages = async (productId: string, images: PendingImage[]) => {
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      const fileExt = img.file.name.split('.').pop();
+      const fileName = `${productId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, img.file, { cacheControl: '3600', upsert: false });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(data.path);
+
+      await supabase.from('product_images').insert({
+        product_id: productId,
+        image_url: urlData.publicUrl,
+        is_main: img.isMain,
+        sort_order: i,
+      });
+    }
+  };
+
   const createMutation = useMutation({
-    mutationFn: async ({ data, variants }: { data: typeof formData; variants: VariantFormItem[] }) => {
-      const slug = data.slug || data.name.toLowerCase().replace(/\s+/g, '-');
+    mutationFn: async ({ data, variants, images }: { data: typeof formData; variants: VariantFormItem[]; images: PendingImage[] }) => {
+      const slug = data.slug || data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       
-      // Create product first
       const { data: newProduct, error: productError } = await supabase
         .from('products')
         .insert({
@@ -110,7 +140,12 @@ export default function AdminProducts() {
       
       if (productError) throw productError;
 
-      // Create variants if any
+      // Upload images
+      if (images.length > 0 && newProduct) {
+        await uploadPendingImages(newProduct.id, images);
+      }
+
+      // Create variants
       if (variants.length > 0 && newProduct) {
         const variantsToInsert = variants.map(v => ({
           product_id: newProduct.id,
@@ -203,7 +238,9 @@ export default function AdminProducts() {
       step_qty: '1',
     });
     setFormVariants([]);
+    setFormImages([]);
     setEditingProduct(null);
+    setFormTab('info');
   };
 
   const openEditDialog = (product: Product & { variants?: ProductVariant[] }) => {
@@ -222,7 +259,6 @@ export default function AdminProducts() {
       min_order_qty: String(product.min_order_qty),
       step_qty: String(product.step_qty),
     });
-    // Load existing variants into form
     const existingVariants: VariantFormItem[] = (product.variants || []).map(v => ({
       id: v.id,
       name: v.name,
@@ -233,6 +269,8 @@ export default function AdminProducts() {
       is_new: false,
     }));
     setFormVariants(existingVariants);
+    setFormImages([]);
+    setFormTab('info');
     setIsDialogOpen(true);
   };
 
@@ -241,14 +279,24 @@ export default function AdminProducts() {
     if (editingProduct) {
       updateMutation.mutate({ ...formData, id: editingProduct.id });
     } else {
-      createMutation.mutate({ data: formData, variants: formVariants });
+      createMutation.mutate({ data: formData, variants: formVariants, images: formImages });
     }
+  };
+
+  const getProductMainImage = (product: Product & { images: ProductImage[] }) => {
+    return product.images?.find(img => img.is_main)?.image_url || product.images?.[0]?.image_url;
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-display font-bold">Mahsulotlar</h1>
+        <div>
+          <h1 className="text-2xl font-display font-bold">Mahsulotlar</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {products?.length || 0} ta mahsulot
+          </p>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger asChild>
             <Button className="gap-2">
@@ -262,161 +310,215 @@ export default function AdminProducts() {
                 {editingProduct ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot'}
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nomi *</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Slug</Label>
-                  <Input
-                    value={formData.slug}
-                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                    placeholder="avtomatik generatsiya"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Kategoriya</Label>
-                  <Select
-                    value={formData.category_id}
-                    onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tanlang" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories?.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Artikul (SKU)</Label>
-                  <Input
-                    value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label>Tavsif</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
+            <Tabs value={formTab} onValueChange={setFormTab}>
+              <TabsList className="w-full grid grid-cols-3 mb-4">
+                <TabsTrigger value="info">Asosiy</TabsTrigger>
+                <TabsTrigger value="images">
+                  Rasmlar
+                  {!editingProduct && formImages.length > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 h-5 w-5 p-0 justify-center text-[10px]">
+                      {formImages.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="variants">
+                  Variantlar
+                  {formVariants.length > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 h-5 w-5 p-0 justify-center text-[10px]">
+                      {formVariants.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-              <div className="grid sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Tannarx *</Label>
-                  <Input
-                    type="number"
-                    value={formData.cost_price}
-                    onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
-                    placeholder="0"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Sotuv narxi *</Label>
-                  <Input
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    placeholder="0"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Eski narx (aksiya)</Label>
-                  <Input
-                    type="number"
-                    value={formData.old_price}
-                    onChange={(e) => setFormData({ ...formData, old_price: e.target.value })}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
+              <form onSubmit={handleSubmit}>
+                {/* Tab: Info */}
+                <TabsContent value="info" className="space-y-4 mt-0">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Nomi *</Label>
+                      <Input
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        required
+                        placeholder="Mahsulot nomi"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Slug</Label>
+                      <Input
+                        value={formData.slug}
+                        onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                        placeholder="avtomatik generatsiya"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Kategoriya</Label>
+                      <Select
+                        value={formData.category_id}
+                        onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Tanlang" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories?.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Artikul (SKU)</Label>
+                      <Input
+                        value={formData.sku}
+                        onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-              <div className="grid sm:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label>Omborda</Label>
-                  <Input
-                    type="number"
-                    value={formData.stock_qty}
-                    onChange={(e) => setFormData({ ...formData, stock_qty: e.target.value })}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Min. buyurtma</Label>
-                  <Input
-                    type="number"
-                    value={formData.min_order_qty}
-                    onChange={(e) => setFormData({ ...formData, min_order_qty: e.target.value })}
-                    placeholder="1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Qadam</Label>
-                  <Input
-                    type="number"
-                    value={formData.step_qty}
-                    onChange={(e) => setFormData({ ...formData, step_qty: e.target.value })}
-                    placeholder="1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Birlik</Label>
-                  <Select
-                    value={formData.unit}
-                    onValueChange={(value) => setFormData({ ...formData, unit: value as any })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dona">Dona</SelectItem>
-                      <SelectItem value="kg">Kg</SelectItem>
-                      <SelectItem value="quti">Quti</SelectItem>
-                      <SelectItem value="paket">Paket</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                  <div className="space-y-2">
+                    <Label>Tavsif</Label>
+                    <Textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
 
-              {/* Inline Variant Editor - only show for new products */}
-              {!editingProduct && (
-                <div className="border-t pt-4">
-                  <InlineVariantEditor
-                    variants={formVariants}
-                    onChange={setFormVariants}
-                    basePrice={formData.price}
-                    baseCostPrice={formData.cost_price}
-                  />
-                </div>
-              )}
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Tannarx *</Label>
+                      <Input
+                        type="number"
+                        value={formData.cost_price}
+                        onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                        placeholder="0"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Sotuv narxi *</Label>
+                      <Input
+                        type="number"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        placeholder="0"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Eski narx</Label>
+                      <Input
+                        type="number"
+                        value={formData.old_price}
+                        onChange={(e) => setFormData({ ...formData, old_price: e.target.value })}
+                        placeholder="—"
+                      />
+                    </div>
+                  </div>
 
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Bekor
-                </Button>
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                  {editingProduct ? 'Saqlash' : 'Qo\'shish'}
-                </Button>
-              </div>
-            </form>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label>Omborda</Label>
+                      <Input
+                        type="number"
+                        value={formData.stock_qty}
+                        onChange={(e) => setFormData({ ...formData, stock_qty: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Min. buyurtma</Label>
+                      <Input
+                        type="number"
+                        value={formData.min_order_qty}
+                        onChange={(e) => setFormData({ ...formData, min_order_qty: e.target.value })}
+                        placeholder="1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Qadam</Label>
+                      <Input
+                        type="number"
+                        value={formData.step_qty}
+                        onChange={(e) => setFormData({ ...formData, step_qty: e.target.value })}
+                        placeholder="1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Birlik</Label>
+                      <Select
+                        value={formData.unit}
+                        onValueChange={(value) => setFormData({ ...formData, unit: value as any })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dona">Dona</SelectItem>
+                          <SelectItem value="kg">Kg</SelectItem>
+                          <SelectItem value="quti">Quti</SelectItem>
+                          <SelectItem value="paket">Paket</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Tab: Images */}
+                <TabsContent value="images" className="mt-0">
+                  {editingProduct ? (
+                    <ImageUploader
+                      productId={editingProduct.id}
+                      images={products?.find(p => p.id === editingProduct.id)?.images || []}
+                      onImagesChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
+                    />
+                  ) : (
+                    <CreateImageUploader
+                      images={formImages}
+                      onChange={setFormImages}
+                    />
+                  )}
+                </TabsContent>
+
+                {/* Tab: Variants */}
+                <TabsContent value="variants" className="mt-0">
+                  {editingProduct ? (
+                    <VariantManager
+                      productId={editingProduct.id}
+                      variants={products?.find(p => p.id === editingProduct.id)?.variants || []}
+                      basePrice={products?.find(p => p.id === editingProduct.id)?.price || 0}
+                      baseCostPrice={products?.find(p => p.id === editingProduct.id)?.cost_price || 0}
+                      onVariantsChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
+                    />
+                  ) : (
+                    <InlineVariantEditor
+                      variants={formVariants}
+                      onChange={setFormVariants}
+                      basePrice={formData.price}
+                      baseCostPrice={formData.cost_price}
+                    />
+                  )}
+                </TabsContent>
+
+                <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Bekor
+                  </Button>
+                  <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                    {(createMutation.isPending || updateMutation.isPending) && (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    )}
+                    {editingProduct ? 'Saqlash' : 'Qo\'shish'}
+                  </Button>
+                </div>
+              </form>
+            </Tabs>
           </DialogContent>
         </Dialog>
       </div>
@@ -427,132 +529,111 @@ export default function AdminProducts() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Qidirish..."
+          placeholder="Mahsulot qidirish..."
           className="input-icon"
         />
       </div>
 
-      {/* Products table */}
-      <div className="bg-card rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-secondary">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium">Mahsulot</th>
-                <th className="text-left px-4 py-3 font-medium">Kategoriya</th>
-                <th className="text-left px-4 py-3 font-medium">Narx</th>
-                <th className="text-left px-4 py-3 font-medium">Ombor</th>
-                <th className="text-left px-4 py-3 font-medium">Variantlar</th>
-                <th className="text-right px-4 py-3 font-medium">Amallar</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={6} className="px-4 py-3">
-                      <Skeleton className="h-10 w-full" />
-                    </td>
-                  </tr>
-                ))
-              ) : products?.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                    Mahsulotlar topilmadi
-                  </td>
-                </tr>
-              ) : (
-                products?.map((product) => (
-                  <tr key={product.id} className="hover:bg-secondary/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        {product.images?.find(img => img.is_main)?.image_url ? (
-                          <img 
-                            src={product.images.find(img => img.is_main)?.image_url} 
-                            alt={product.name}
-                            className="w-10 h-10 rounded-lg object-cover shrink-0 cursor-pointer hover:opacity-80"
-                            onClick={() => setShowImageManager(product.id)}
-                          />
-                        ) : (
-                          <button
-                            onClick={() => setShowImageManager(product.id)}
-                            className="w-10 h-10 bg-secondary rounded-lg flex items-center justify-center shrink-0 hover:bg-secondary/80 transition-colors border-2 border-dashed border-border"
-                            title="Rasm qo'shish"
-                          >
-                            <ImageIcon className="w-5 h-5 text-muted-foreground" />
-                          </button>
-                        )}
-                        <div>
-                          <div className="font-medium">{product.name}</div>
-                          {product.sku && (
-                            <div className="text-xs text-muted-foreground">{product.sku}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {product.category?.name || '-'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold">{formatPrice(product.price)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Tannarx: {formatPrice(product.cost_price)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={product.stock_qty > 0 ? 'text-success' : 'text-destructive'}>
-                        {product.stock_qty} {product.unit}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1 h-8 text-xs"
-                        onClick={() => setShowVariantManager(product.id)}
-                      >
+      {/* Products grid/cards */}
+      <div className="space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-2xl" />
+          ))
+        ) : products?.length === 0 ? (
+          <div className="bg-card rounded-2xl p-12 text-center">
+            <Package className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">Mahsulotlar topilmadi</p>
+          </div>
+        ) : (
+          products?.map((product) => {
+            const mainImage = getProductMainImage(product);
+            const activeVariants = product.variants?.filter(v => v.is_active) || [];
+            return (
+              <div
+                key={product.id}
+                className="bg-card rounded-2xl p-4 flex items-center gap-4 group hover:shadow-md transition-shadow"
+              >
+                {/* Image */}
+                <button
+                  onClick={() => setShowImageManager(product.id)}
+                  className="shrink-0"
+                >
+                  {mainImage ? (
+                    <img
+                      src={mainImage}
+                      alt={product.name}
+                      className="w-14 h-14 rounded-xl object-cover hover:opacity-80 transition-opacity"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 bg-secondary rounded-xl flex items-center justify-center border-2 border-dashed border-border hover:border-primary/50 transition-colors">
+                      <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                  )}
+                </button>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold truncate">{product.name}</h3>
+                    {product.category?.name && (
+                      <Badge variant="secondary" className="text-[10px] shrink-0">
+                        {product.category.name}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-sm">
+                    <span className="font-bold text-primary">{formatPrice(product.price)}</span>
+                    <span className="text-muted-foreground text-xs">
+                      Tannarx: {formatPrice(product.cost_price)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <span className={product.stock_qty > 0 ? 'text-success' : 'text-destructive'}>
+                      {product.stock_qty} {product.unit}
+                    </span>
+                    {activeVariants.length > 0 && (
+                      <span className="flex items-center gap-1">
                         <Layers className="w-3 h-3" />
-                        {product.variants?.length || 0}
-                      </Button>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setShowImageManager(product.id)}
-                        title="Rasmlar"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(product)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive"
-                        onClick={() => {
-                          if (confirm('Mahsulotni o\'chirishni xohlaysizmi?')) {
-                            deleteMutation.mutate(product.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                        {activeVariants.length} variant
+                      </span>
+                    )}
+                    {product.sku && <span>SKU: {product.sku}</span>}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => openEditDialog(product)}
+                    title="Tahrirlash"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-destructive hover:text-destructive"
+                    onClick={() => {
+                      if (confirm('Mahsulotni o\'chirishni xohlaysizmi?')) {
+                        deleteMutation.mutate(product.id);
+                      }
+                    }}
+                    title="O'chirish"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
-      {/* Image Manager Dialog */}
+      {/* Image Manager Dialog (standalone for existing products) */}
       <Dialog open={!!showImageManager} onOpenChange={() => setShowImageManager(null)}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -563,31 +644,6 @@ export default function AdminProducts() {
               productId={showImageManager}
               images={products?.find(p => p.id === showImageManager)?.images || []}
               onImagesChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Variant Manager Dialog */}
-      <Dialog open={!!showVariantManager} onOpenChange={() => setShowVariantManager(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              Mahsulot variantlari
-              {showVariantManager && (
-                <span className="text-muted-foreground font-normal text-sm block mt-1">
-                  {products?.find(p => p.id === showVariantManager)?.name}
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          {showVariantManager && (
-            <VariantManager
-              productId={showVariantManager}
-              variants={products?.find(p => p.id === showVariantManager)?.variants || []}
-              basePrice={products?.find(p => p.id === showVariantManager)?.price || 0}
-              baseCostPrice={products?.find(p => p.id === showVariantManager)?.cost_price || 0}
-              onVariantsChange={() => queryClient.invalidateQueries({ queryKey: ['admin-products'] })}
             />
           )}
         </DialogContent>
