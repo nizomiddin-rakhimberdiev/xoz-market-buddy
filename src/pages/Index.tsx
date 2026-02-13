@@ -41,13 +41,13 @@ export default function Index() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Hero section */}
-        <section className="text-center py-8 md:py-12">
-          <h1 className="text-3xl md:text-4xl lg:text-5xl font-display font-bold mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+        <section className="text-center py-4 sm:py-8 md:py-12">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-display font-bold mb-2 sm:mb-4 bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
             Xoztovarsga xush kelibsiz!
           </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-sm sm:text-lg max-w-2xl mx-auto">
             Eng sifatli xo'jalik tovarlari bir joyda. Tez yetkazib berish va qulay narxlar.
           </p>
         </section>
