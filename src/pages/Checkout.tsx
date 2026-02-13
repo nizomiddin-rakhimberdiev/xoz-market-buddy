@@ -128,17 +128,17 @@ export default function Checkout() {
           Savatga qaytish
         </Link>
 
-        <h1 className="text-2xl md:text-3xl font-display font-bold mb-8">
+        <h1 className="text-xl md:text-3xl font-display font-bold mb-4 sm:mb-8">
           Buyurtmani rasmiylashtirish
         </h1>
 
         <form onSubmit={handleSubmit}>
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid lg:grid-cols-3 gap-4 sm:gap-8">
             {/* Form */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               {/* Contact info */}
-              <div className="bg-card rounded-2xl p-6 space-y-4">
-                <h2 className="font-display font-bold text-lg">Aloqa ma'lumotlari</h2>
+              <div className="bg-card rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4">
+                <h2 className="font-display font-bold text-base sm:text-lg">Aloqa ma'lumotlari</h2>
                 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -172,27 +172,27 @@ export default function Checkout() {
               </div>
 
               {/* Delivery type */}
-              <div className="bg-card rounded-2xl p-6 space-y-4">
-                <h2 className="font-display font-bold text-lg">Yetkazib berish</h2>
+              <div className="bg-card rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4">
+                <h2 className="font-display font-bold text-base sm:text-lg">Yetkazib berish</h2>
                 
-                <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, deliveryType: 'pickup' })}
                     className={cn(
-                      'p-4 rounded-xl border-2 transition-all text-left flex items-start gap-3',
+                      'p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left flex items-center gap-2',
                       formData.deliveryType === 'pickup'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <Store className="w-6 h-6 text-primary shrink-0" />
-                    <div>
-                      <div className="font-medium">Olib ketish</div>
-                      <div className="text-sm text-muted-foreground">Do'kondan o'zingiz olasiz</div>
+                    <Store className="w-5 h-5 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm">Olib ketish</div>
+                      <div className="text-xs text-muted-foreground hidden sm:block">Do'kondan o'zingiz olasiz</div>
                     </div>
                     {formData.deliveryType === 'pickup' && (
-                      <Check className="w-5 h-5 text-primary ml-auto" />
+                      <Check className="w-4 h-4 text-primary ml-auto shrink-0" />
                     )}
                   </button>
                   
@@ -200,19 +200,19 @@ export default function Checkout() {
                     type="button"
                     onClick={() => setFormData({ ...formData, deliveryType: 'delivery' })}
                     className={cn(
-                      'p-4 rounded-xl border-2 transition-all text-left flex items-start gap-3',
+                      'p-2.5 sm:p-3 rounded-xl border-2 transition-all text-left flex items-center gap-2',
                       formData.deliveryType === 'delivery'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <Truck className="w-6 h-6 text-primary shrink-0" />
-                    <div>
-                      <div className="font-medium">Yetkazib berish</div>
-                      <div className="text-sm text-muted-foreground">Manzilingizga yetkazamiz</div>
+                    <Truck className="w-5 h-5 text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm">Yetkazib berish</div>
+                      <div className="text-xs text-muted-foreground hidden sm:block">Manzilingizga yetkazamiz</div>
                     </div>
                     {formData.deliveryType === 'delivery' && (
-                      <Check className="w-5 h-5 text-primary ml-auto" />
+                      <Check className="w-4 h-4 text-primary ml-auto shrink-0" />
                     )}
                   </button>
                 </div>
@@ -243,57 +243,57 @@ export default function Checkout() {
               </div>
 
               {/* Payment type */}
-              <div className="bg-card rounded-2xl p-6 space-y-4">
-                <h2 className="font-display font-bold text-lg">To'lov usuli</h2>
+              <div className="bg-card rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4">
+                <h2 className="font-display font-bold text-base sm:text-lg">To'lov usuli</h2>
                 
-                <div className="grid sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, paymentType: 'cash' })}
                     className={cn(
-                      'p-4 rounded-xl border-2 transition-all text-center',
+                      'p-2.5 sm:p-3 rounded-xl border-2 transition-all text-center',
                       formData.paymentType === 'cash'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <Banknote className="w-8 h-8 text-primary mx-auto mb-2" />
-                    <div className="font-medium">Naqd pul</div>
+                    <Banknote className="w-6 h-6 text-primary mx-auto mb-1" />
+                    <div className="font-medium text-xs sm:text-sm">Naqd</div>
                   </button>
                   
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, paymentType: 'card' })}
                     className={cn(
-                      'p-4 rounded-xl border-2 transition-all text-center',
+                      'p-2.5 sm:p-3 rounded-xl border-2 transition-all text-center',
                       formData.paymentType === 'card'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <CreditCard className="w-8 h-8 text-primary mx-auto mb-2" />
-                    <div className="font-medium">Karta</div>
+                    <CreditCard className="w-6 h-6 text-primary mx-auto mb-1" />
+                    <div className="font-medium text-xs sm:text-sm">Karta</div>
                   </button>
                   
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, paymentType: 'transfer' })}
                     className={cn(
-                      'p-4 rounded-xl border-2 transition-all text-center',
+                      'p-2.5 sm:p-3 rounded-xl border-2 transition-all text-center',
                       formData.paymentType === 'transfer'
                         ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <Building2 className="w-8 h-8 text-primary mx-auto mb-2" />
-                    <div className="font-medium">O'tkazma</div>
+                    <Building2 className="w-6 h-6 text-primary mx-auto mb-1" />
+                    <div className="font-medium text-xs sm:text-sm">O'tkazma</div>
                   </button>
                 </div>
               </div>
 
               {/* Comment */}
-              <div className="bg-card rounded-2xl p-6 space-y-4">
-                <h2 className="font-display font-bold text-lg">Izoh (ixtiyoriy)</h2>
+              <div className="bg-card rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4">
+                <h2 className="font-display font-bold text-base sm:text-lg">Izoh (ixtiyoriy)</h2>
                 <Textarea
                   value={formData.comment}
                   onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
@@ -305,8 +305,8 @@ export default function Checkout() {
 
             {/* Summary */}
             <div className="lg:col-span-1">
-              <div className="bg-card rounded-2xl p-6 sticky top-24">
-                <h2 className="font-display font-bold text-lg mb-4">Buyurtma</h2>
+              <div className="bg-card rounded-2xl p-4 sm:p-6 sticky top-24">
+                <h2 className="font-display font-bold text-base sm:text-lg mb-3 sm:mb-4">Buyurtma</h2>
                 
                 <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto">
                   {items.map((item) => (

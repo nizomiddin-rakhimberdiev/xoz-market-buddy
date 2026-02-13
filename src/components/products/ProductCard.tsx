@@ -120,13 +120,13 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
 
           {/* Content */}
-          <div className="p-3 space-y-2">
-            <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem] group-hover:text-primary transition-colors">
+          <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+            <h3 className="font-medium text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] group-hover:text-primary transition-colors">
               {product.name}
             </h3>
             
-            <div className="flex items-end gap-2">
-              <span className="price-tag text-lg">{formatPrice(product.price)}</span>
+            <div className="flex items-end gap-1 sm:gap-2">
+              <span className="price-tag text-sm sm:text-lg">{formatPrice(product.price)}</span>
               {product.old_price && product.old_price > product.price && (
                 <span className="price-old">{formatPrice(product.old_price)}</span>
               )}

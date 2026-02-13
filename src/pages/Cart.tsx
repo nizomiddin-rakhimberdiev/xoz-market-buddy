@@ -31,8 +31,8 @@ export default function Cart() {
     <MainLayout>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl md:text-3xl font-display font-bold">
+        <div className="flex items-center justify-between mb-4 sm:mb-8">
+          <h1 className="text-xl md:text-3xl font-display font-bold">
             Savat ({items.length})
           </h1>
           <Button 
@@ -46,16 +46,16 @@ export default function Cart() {
           </Button>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-4 sm:gap-8">
           {/* Items list */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-2.5 sm:space-y-4">
             {items.map((item) => (
               <div 
                 key={`${item.productId}-${item.variantId}`}
-                className="bg-card rounded-2xl p-4 flex gap-4 animate-fade-in"
+                className="bg-card rounded-xl sm:rounded-2xl p-3 sm:p-4 flex gap-3 sm:gap-4 animate-fade-in"
               >
                 {/* Image */}
-                <div className="w-24 h-24 bg-secondary rounded-xl overflow-hidden shrink-0">
+                <div className="w-16 h-16 sm:w-24 sm:h-24 bg-secondary rounded-lg sm:rounded-xl overflow-hidden shrink-0">
                   {item.image ? (
                     <img
                       src={item.image}
@@ -75,7 +75,7 @@ export default function Cart() {
                   {item.variantName && (
                     <p className="text-sm text-muted-foreground">{item.variantName}</p>
                   )}
-                  <p className="text-lg font-bold text-primary mt-1">
+                  <p className="text-sm sm:text-lg font-bold text-primary mt-0.5 sm:mt-1">
                     {formatPrice(item.price)}
                   </p>
                 </div>
@@ -126,8 +126,8 @@ export default function Cart() {
 
           {/* Summary */}
           <div className="lg:col-span-1">
-            <div className="bg-card rounded-2xl p-6 sticky top-24">
-              <h2 className="font-display font-bold text-lg mb-4">Buyurtma</h2>
+              <div className="bg-card rounded-xl sm:rounded-2xl p-4 sm:p-6 sticky top-24">
+              <h2 className="font-display font-bold text-base sm:text-lg mb-3 sm:mb-4">Buyurtma</h2>
               
               <div className="space-y-3 mb-6">
                 {items.map((item) => (
