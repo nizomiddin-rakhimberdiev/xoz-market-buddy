@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -6,17 +6,22 @@ import { CategoryFilter } from '@/components/products/CategoryFilter';
 import { ProductGrid } from '@/components/products/ProductGrid';
 import { getCategories, getProducts } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
+import type { Product } from '@/types/database';
+
+const PRODUCTS_PER_PAGE = 20;
 
 export default function Index() {
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
 
-  // Reset page when category or search changes
+  // Reset when category or search changes
   useEffect(() => {
     setPage(1);
+    setAllProducts([]);
   }, [selectedCategory, searchQuery]);
 
   const { data: categories, isLoading: categoriesLoading } = useQuery({
@@ -24,20 +29,34 @@ export default function Index() {
     queryFn: getCategories,
   });
 
-  const { data: productsData, isLoading: productsLoading } = useQuery({
+  const { data: productsData, isLoading: productsLoading, isFetching } = useQuery({
     queryKey: ['products', selectedCategory, searchQuery, page],
     queryFn: () =>
       getProducts({
         categoryId: selectedCategory || undefined,
         search: searchQuery || undefined,
         page,
-        limit: 20,
+        limit: PRODUCTS_PER_PAGE,
       }),
   });
 
-  const products = productsData?.products || [];
+  // Accumulate products for "load more" pagination
+  useEffect(() => {
+    if (productsData?.products) {
+      if (page === 1) {
+        setAllProducts(productsData.products);
+      } else {
+        setAllProducts(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newProducts = productsData.products.filter(p => !existingIds.has(p.id));
+          return [...prev, ...newProducts];
+        });
+      }
+    }
+  }, [productsData, page]);
+
   const totalProducts = productsData?.total || 0;
-  const hasMore = products.length < totalProducts && page * 20 < totalProducts;
+  const hasMore = allProducts.length < totalProducts;
 
   return (
     <MainLayout>
@@ -71,7 +90,7 @@ export default function Index() {
 
         {/* Products grid */}
         <section>
-          <ProductGrid products={products} isLoading={productsLoading} />
+          <ProductGrid products={allProducts} isLoading={productsLoading && page === 1} />
         </section>
 
         {/* Load more */}
@@ -82,9 +101,14 @@ export default function Index() {
               size="lg"
               onClick={() => setPage((p) => p + 1)}
               className="gap-2"
+              disabled={isFetching}
             >
-              <ChevronDown className="w-4 h-4" />
-              Ko'proq ko'rsatish
+              {isFetching ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+              {isFetching ? 'Yuklanmoqda...' : 'Ko\'proq ko\'rsatish'}
             </Button>
           </div>
         )}

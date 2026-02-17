@@ -341,11 +341,36 @@ serve(async (req) => {
     // Generate order number
     const orderNumber = `XOZ-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
     
-    // Calculate total from validated prices
-    const totalAmount = input.items.reduce(
-      (sum, item) => sum + item.unit_price * item.quantity,
-      0
-    );
+    // Build variant map for price/cost lookups
+    const variantMap = new Map<string, { price_override: number | null; cost_price_override: number | null }>();
+    if (variantIds.length > 0) {
+      const { data: variantsForCost } = await supabase
+        .from('product_variants')
+        .select('id, price_override, cost_price_override')
+        .in('id', variantIds);
+      variantsForCost?.forEach(v => variantMap.set(v.id, v));
+    }
+
+    // Build order items with SERVER-SIDE prices (never trust client)
+    const pendingItems = input.items.map((item) => {
+      const product = productMap.get(item.product_id)!;
+      const variant = item.variant_id ? variantMap.get(item.variant_id) : null;
+      const serverCostPrice = variant?.cost_price_override ?? product.cost_price;
+      const serverUnitPrice = variant?.price_override ?? product.price;
+      
+      return {
+        product_id: item.product_id,
+        variant_id: item.variant_id || null,
+        quantity: item.quantity,
+        unit_price: serverUnitPrice,
+        line_total: serverUnitPrice * item.quantity,
+        cost_price_snapshot: serverCostPrice,
+        product_name_snapshot: item.product_name,
+      };
+    });
+
+    // Calculate total from server-validated prices
+    const totalAmount = pendingItems.reduce((sum, item) => sum + item.line_total, 0);
     
     // Create order
     const { data: order, error: orderError } = await supabase
@@ -374,17 +399,8 @@ serve(async (req) => {
       );
     }
     
-    // Create order items
-    const orderItems = input.items.map((item) => ({
-      order_id: order.id,
-      product_id: item.product_id,
-      variant_id: item.variant_id || null,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      line_total: item.unit_price * item.quantity,
-      cost_price_snapshot: item.cost_price,
-      product_name_snapshot: item.product_name,
-    }));
+    // Attach order_id to items
+    const orderItems = pendingItems.map(item => ({ ...item, order_id: order.id }));
     
     const { error: itemsError } = await supabase
       .from('order_items')
