@@ -80,7 +80,7 @@ export default function Checkout() {
           variant_id: item.variantId,
           quantity: item.quantity,
           unit_price: item.price,
-          cost_price: item.price, // Will be updated from product data in production
+          cost_price: 0, // Server calculates real cost_price from database
           product_name: `${item.name}${item.variantName ? ` (${item.variantName})` : ''}`,
         })),
       });
